@@ -468,8 +468,10 @@ else
             catch
                 fspec{i} =[];
                 
+                disp('Using mtchglongIn instead of LoadSpecArch.')
                 weeg{i} =  WhitenSignalIn(rawEeg{i},eegFS*2000,1);
-                [fspec{i}.spec, fspec{i}.fo, fspec{i}.to] = mtchglongIn(weeg{i}, 3072, eegFS, eegFS, 0, [], [], [], [0 200]);
+%                 [fspec{i}.spec, fspec{i}.fo, fspec{i}.to] = mtchglongIn(weeg{i}, 3072, eegFS, eegFS, 0, [], [], [], [0 200]);
+                [fspec{i}.spec, fspec{i}.fo, fspec{i}.to] = mtchglongIn(weeg{i}, 12500, eegFS, eegFS, 0, [], [], [], [0 500]);
                 fspec{i}.spec = single(fspec{i}.spec);
                 fspec{i}.info.Ch = Chs(i);
                 fspec{i}.info.FileInfo.name = [baseName, suffix];
@@ -694,7 +696,7 @@ else
     
     disp(['Saving ', baseName, '.eegstates.mat...']);
     try
-        save([baseName, '.eegstates.mat'], 'StateInfo');
+        save([baseName, '.eegstates.mat'], 'StateInfo','-v7.3','-nocompression'); % Changed to v7.3 to accomodate files >2 GB.
     catch
         warndlg(['Failed to save ' , baseName, '.eegstates.mat']);
     end
@@ -1181,7 +1183,8 @@ FO.hanningWDisp = uicontrol('style', 'popup', 'Units', 'normalized', 'Position',
 set(FO.hanningWDisp, 'String', optString, 'CallBack', {@ChangeSmoothingWindow}, 'Value', find(Woptions == FO.hanningW));
 
 %Overlay stuff
-Ooptions = ['none|(5-10Hz)/(0.5-4Hz)|From SleepScoreMaster|Choose from file'];
+%Ooptions = ['none|(5-10Hz)/(0.5-4Hz)|From SleepScoreMaster|Choose from file'];
+Ooptions=['none|(5-10Hz)/(0.5-4Hz)|From SleepScoreMaster|(11-18Hz)/(0.5-4Hz)|Choose from file'];
 a = annotation('textbox', 'Units', 'normalized', 'Position', [0.855, 0.46, 0.1355, 0.03], 'EdgeColor', 'none');
 set(a, 'String', 'Overlay Display:');
 FO.overlayDisp = uicontrol('style', 'popup', 'Units', 'normalized', 'Position', [0.8800    0.45    0.0800    0.01]);
@@ -3127,8 +3130,34 @@ switch get(FO.overlayDisp, 'Value')
             end
         end                        
   
+    case 4 %sigma/delta ratio
+        if ~isempty(FO.overlayLines)
+            for i=1:length(FO.overlayLines)
+                delete(FO.overlayLines);
+            end    
+            FO.overlayLines={};
+        end    
+        maxF=FO.maxFreq;
+        fo=FO.fo;
         
-    case 4  %From File
+        for i = 1:length(FO.sax)
+            m=mean(unsmoothedSpec{i}(:,fo>=11 & fo<=18),2)./mean(unsmoothedSpec{i}(:,fo>=0.5 & fo<=4),2);
+            if FO.hanningW>0
+                m=convtrimIn(m,hanning(FO.hanningW));
+            end     
+            m=m-prctile(m,1);
+            m=m./prctile(m,99);
+            range=maxF*(1/2);
+            base=maxF*(1/2);
+            m=m*range;
+            m=m+base;
+            axes(FO.sax{i});
+            hold on;
+            FO.overlayLines{i}=plot(FO.to,m,'-w','Linewidth',2.5);
+                    
+        end    
+        
+    case 5  %From File
         helpdlg({['load a .mat with a single variable with n columns of time bins'],...
             ['(n = ', int2str(length(FO.to)),') and up to ', int2str(FO.nCh), ' rows. Successive rows of the'],...
             ['input will be displayed overlayed on on successive'],...
